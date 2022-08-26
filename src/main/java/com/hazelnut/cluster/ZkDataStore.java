@@ -14,6 +14,9 @@ import java.util.List;
 import static com.hazelnut.utils.DataMapper.*;
 
 @Service
+/**
+ * Data access layer to fetch or set data from/to ZooKeeper cluster meta
+ */
 public class ZkDataStore {
     private ZkConnectionManager zkConnectionManager;
     private Logger logger = LoggerFactory.getLogger(ZkDataStore.class);
@@ -24,6 +27,13 @@ public class ZkDataStore {
 
     }
 
+    /**
+     * Checks the startup status of the cluster from Apache ZooKeeper
+     *
+     * @param clusterStatusPath
+     * @param fallBackValue
+     * @return True if cluster is already marked as started
+     */
     public boolean getClusterInitStatus(String clusterStatusPath, boolean fallBackValue) {
         byte[] data = null;
         try {
@@ -38,6 +48,12 @@ public class ZkDataStore {
         return fallBackValue;
     }
 
+    /**
+     * Sets the startup status of the cluster in Apache ZooKeeper
+     *
+     * @param clusterStatusPath
+     * @param status
+     */
     public void setClusterInitStatus(String clusterStatusPath, boolean status) {
         byte[] data = booleanToBytes(status);
         try {
@@ -47,7 +63,13 @@ public class ZkDataStore {
         }
     }
 
-
+    /**
+     * List the nodes which are reporting to the cluster
+     *
+     * @param clusterPath
+     * @return list of nodes ids
+     * @throws Exception
+     */
     public List<String> getClusterNodes(String clusterPath) throws Exception {
         List<String> nodes = null;
         try {
@@ -62,7 +84,13 @@ public class ZkDataStore {
         return nodes != null ? nodes : Collections.emptyList();
     }
 
-
+    /**
+     * get the time in epoch millis for a node when it last communicated its health to ZooKeeper
+     *
+     * @param nodePath
+     * @param fallBackValue
+     * @return node's latest health reporting time
+     */
     public Long getNodeHeartBeatTime(String nodePath, Long fallBackValue) {
         byte[] data = null;
         try {
@@ -78,6 +106,14 @@ public class ZkDataStore {
         return data != null ? bytesToLong(data) : fallBackValue;
     }
 
+    /**
+     * report the heart beat of this running node to ZooKeeper
+     *
+     * @param nodePath
+     * @param timeMillis
+     * @param ttl        i.e. time to live for this data, as we don't need older records to establish cluster's health later
+     * @throws IllegalStateException
+     */
     public void setNodeHeartBeatTime(String nodePath, long timeMillis, long ttl) throws IllegalStateException {
         try {
             if (ttl > 0) {

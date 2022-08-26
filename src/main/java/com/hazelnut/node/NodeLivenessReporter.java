@@ -15,10 +15,9 @@ import static com.hazelnut.HazelNutApplication.NODE_ID;
 
 @Service
 public class NodeLivenessReporter {
-//    @Autowired
     private ZkDataStore zkDataStore;
 
-    public NodeLivenessReporter(@Autowired ZkDataStore zkDataStore){
+    public NodeLivenessReporter(@Autowired ZkDataStore zkDataStore) {
         this.zkDataStore = zkDataStore;
     }
 
@@ -36,6 +35,9 @@ public class NodeLivenessReporter {
 
     @Scheduled(fixedDelayString = "${node.liveness.reporting.time.ms}")
     @Async
+    /**
+     * Report the heart beat to ZooKeeper after every fixed delay
+     */
     public void reportHeartBeatToCluster() {
         zkDataStore.setNodeHeartBeatTime(nodeDataPathPrefix + NODE_ID, Instant.now().toEpochMilli(), ttl);
         logger.info("Published heartbeat to zookeeper");

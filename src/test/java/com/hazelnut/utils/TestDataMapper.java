@@ -1,5 +1,6 @@
 package com.hazelnut.utils;
 
+import com.hazelnut.cluster.DistributedLock;
 import com.hazelnut.cluster.ZkDataStore;
 import com.hazelnut.node.NodeLivenessReporter;
 import com.hazelnut.node.NodeStartup;
@@ -18,6 +19,8 @@ class TestDataMapper {
 
     protected @MockBean
     ZkConnectionManager zkConnectionManager;
+
+    protected @MockBean DistributedLock distributedLock;
 
     protected @MockBean
     ZkDataStore clusterData;

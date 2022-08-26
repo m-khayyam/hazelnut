@@ -1,7 +1,7 @@
 package com.hazelnut.node;
 
+import com.hazelnut.cluster.DistributedLock;
 import com.hazelnut.cluster.ZkDataStore;
-import com.hazelnut.utils.ZkConnectionManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,9 +17,12 @@ import java.util.stream.Stream;
 import static com.hazelnut.HazelNutApplication.NODE_ID;
 
 @Service
+
+/**
+ *Service to perform startup activities
+ *Includes the responsibility to init cluster if required
+ */
 public class NodeStartup {
-    @Value("${distributed.lock.path}")
-    private String lockPath;
 
     @Value("${cluster.max.liveness.threshold.time.ms}")
     private Long clusterivenessThreshold;
@@ -30,50 +33,55 @@ public class NodeStartup {
     @Value("${node.data.path.prefix}")
     private String nodeDataPathPrefix;
 
-    @Value("${distributed.lock.timeout.ms}")
-    private long timeoutMillis;
-
     private ZkDataStore clusterData;
 
-    private ZkConnectionManager zkConnectionManager;
-
+    private DistributedLock distributedLock;
 
     private Logger logger = LoggerFactory.getLogger(NodeStartup.class);
 
-    public NodeStartup(@Autowired ZkDataStore zkDataStore
-            , @Autowired ZkConnectionManager zkConnectionManager) {
+    public NodeStartup(@Autowired ZkDataStore zkDataStore, @Autowired DistributedLock distributedLock) {
         this.clusterData = zkDataStore;
-        this.zkConnectionManager = zkConnectionManager;
+        this.distributedLock = distributedLock;
     }
 
+    /**
+     * No Starts up and checks if cluster is already started other nodes are connected to it
+     * if cluster never started OR other nodes not connected and this is one is only in starting phase then serve starup message
+     * <p>
+     * Please note that in case of network failure or lock failure, we want to proceed with startup message
+     * Thus ideally taking lock and checking status first, but in case of problems proceeding to print
+     */
     public void bootStrapNodeAndCluster() {
 
         boolean clusterInitialized = clusterData.getClusterInitStatus(clusterDataPath, false);
-        boolean lockRequired = false;
+        boolean lockAcquired = false;
         try {
             if (!clusterInitialized) {
-                lockRequired = true;
-                zkConnectionManager.acquireDistributedLock(timeoutMillis, lockPath);
+                lockAcquired = distributedLock.tryLock();
                 clusterInitialized = clusterData.getClusterInitStatus(clusterDataPath, false);
             }
-            // Pleae note that in case of network failure or lock failure, we want to proceed with action
-            // thus ideally taking lock and checking status first, but in case of problems proceeding to print
+
             if (!clusterInitialized || !activeNodesInCluster()) {
                 logger.info("We are started!");
             }
-            if (!clusterInitialized ) {
+            if (!clusterInitialized) {
                 clusterData.setClusterInitStatus(clusterDataPath, true);
             }
         } catch (Exception e) {
             logger.warn(e.getMessage(), e);
         } finally {
-            if (lockRequired) {
-                zkConnectionManager.releaseLock(lockPath);
+            if (lockAcquired) {
+                distributedLock.releaseLock();
             }
         }
     }
 
 
+    /**
+     * Check if there are other nodes connected to cluster
+     *
+     * @return true if any other node is active in cluster
+     */
     private boolean activeNodesInCluster() {
         try {
             List<String> nodeIds = clusterData.getClusterNodes(clusterDataPath);
@@ -90,14 +98,10 @@ public class NodeStartup {
                     return true;
                 }
             }
-
         } catch (Exception e) {
             logger.warn(e.getMessage(), e);
         }
-
         return false;
-
-
     }
 
 

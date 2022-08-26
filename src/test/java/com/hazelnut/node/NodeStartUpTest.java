@@ -1,7 +1,7 @@
 package com.hazelnut.node;
 
 import ch.qos.logback.classic.spi.ILoggingEvent;
-import com.hazelnut.node.preps.AppStartUpTestUtils;
+import com.hazelnut.node.preps.NodeStartUpTestUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.runner.RunWith;
@@ -16,8 +16,7 @@ import java.util.stream.Stream;
 @SpringBootTest
 @RunWith(SpringRunner.class)
 @ExtendWith(SpringExtension.class)
-class AppStartUpTest extends AppStartUpTestUtils {
-
+class NodeStartUpTest extends NodeStartUpTestUtils {
 
     @Test
     //Cluster starting first time and this node gets lock to bootstrap
@@ -34,7 +33,7 @@ class AppStartUpTest extends AppStartUpTestUtils {
 
         verifyThatClusterStartedFlagIsUpdated(EXACTLY_ONCE);
         verifyThatSiblingNodesAreEnquired(NEVER);
-
+        verifyThatLockIsReleased();
     }
 
     @Test
@@ -52,7 +51,6 @@ class AppStartUpTest extends AppStartUpTestUtils {
 
         verifyThatClusterStartedFlagIsUpdated(EXACTLY_ONCE);
         verifyThatSiblingNodesAreEnquired(NEVER);
-
     }
 
     @Test
@@ -60,26 +58,22 @@ class AppStartUpTest extends AppStartUpTestUtils {
     void testNodeAcquiresDistributedLockAndClusterIsAlreadyStarted() throws Exception {
         Stream<ILoggingEvent> logsWritten = captureLogsForAppStartUpService(NodeStartup.class);
 
-        mockLockIsAcquired();
-
         mockThatClusterStatusIs(STARTED);
         mockSibllingNodesAreConnectedAndReporting();
 
         service.bootStrapNodeAndCluster();
 
         verifyThatLogsWrite("We are started!", NEVER, logsWritten);
-        verifyThatLockWasNotRequired();
 
         verifyThatClusterStartedFlagIsUpdated(NEVER);
         verifyThatSiblingNodesAreEnquired(EXACTLY_ONCE);
+        verifyThatLockWasNotRequired();
     }
 
     @Test
     // Cluster already started once, but sibling node not responding and this nodes gets up
     void testNodeAcquiresDistributedLockAndClusterIsRestarted() throws Exception {
         Stream<ILoggingEvent> logsWritten = captureLogsForAppStartUpService(NodeStartup.class);
-
-        mockLockIsAcquired();
 
         mockThatClusterStatusIs(STARTED);
         mockSibllingNodesAreNotConnected();
@@ -92,12 +86,8 @@ class AppStartUpTest extends AppStartUpTestUtils {
         verifyThatSiblingNodesAreEnquired(EXACTLY_ONCE);
     }
 
-
-
     @Configuration
     @Import(NodeStartup.class)
     static class Config {
-
-
     }
 }

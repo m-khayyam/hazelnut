@@ -1,6 +1,7 @@
 package com.hazelnut.node.preps;
 
 import ch.qos.logback.classic.spi.ILoggingEvent;
+import com.hazelnut.cluster.DistributedLock;
 import com.hazelnut.cluster.ZkDataStore;
 import com.hazelnut.node.NodeLivenessReporter;
 import com.hazelnut.node.NodeStartup;
@@ -18,20 +19,22 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.times;
 
-public class AppStartUpTestUtils extends CommonTestUtils {
+public class NodeStartUpTestUtils extends CommonTestUtils {
 
-    protected @MockBean
-    ZkConnectionManager zkConnectionManager;
+    @MockBean
+    protected ZkConnectionManager zkConnectionManager;
 
-    protected @MockBean
-    ZkDataStore clusterData;
+    @MockBean
+    protected DistributedLock distributedLock;
 
-    protected @MockBean
-    NodeLivenessReporter reporter;
+    @MockBean
+    protected ZkDataStore clusterData;
+
+    @MockBean
+    protected NodeLivenessReporter reporter;
 
     @Autowired
     protected NodeStartup service;
-
 
     protected void mockThatClusterStatusIs(boolean value) {
         Mockito.when(clusterData.getClusterInitStatus(anyString(), anyBoolean())).thenReturn(value);
@@ -41,23 +44,25 @@ public class AppStartUpTestUtils extends CommonTestUtils {
         assertEquals(expected, logsWritten.filter(l -> l.getMessage().equals(message)).count());
     }
 
-
     protected void mockLockIsAcquired() {
-        Mockito.when(zkConnectionManager.acquireDistributedLock(anyLong(), anyString())).thenReturn(true);
+        Mockito.when(distributedLock.tryLock()).thenReturn(true);
+    }
+
+    protected void verifyThatLockIsReleased() {
+        Mockito.verify(distributedLock, times(EXACTLY_ONCE)).releaseLock();
     }
 
     protected void mockLockAcquiringFails() {
-        Mockito.when(zkConnectionManager.acquireDistributedLock(anyLong(), anyString())).thenReturn(false);
+        Mockito.when(distributedLock.tryLock()).thenReturn(false);
     }
 
     protected void verifyThatLockWasNotRequired() {
-        Mockito.verify(zkConnectionManager, times(NEVER)).acquireDistributedLock(anyLong(), anyString());
+        Mockito.verify(distributedLock, times(NEVER)).tryLock();
     }
 
     protected void verifyThatClusterStartedFlagIsUpdated(int count) {
         Mockito.verify(clusterData, times(count)).setClusterInitStatus(anyString(), anyBoolean());
     }
-
 
     protected void mockSibllingNodesAreNotConnected() throws Exception {
         Mockito.when(clusterData.getClusterNodes(anyString())).thenReturn(Arrays.asList(NODE_ID, "siblingNode"));
@@ -77,5 +82,4 @@ public class AppStartUpTestUtils extends CommonTestUtils {
             throw new RuntimeException(e);
         }
     }
-
 }
