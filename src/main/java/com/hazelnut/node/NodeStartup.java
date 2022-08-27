@@ -1,7 +1,7 @@
 package com.hazelnut.node;
 
 import com.hazelnut.cluster.DistributedLock;
-import com.hazelnut.cluster.ZkDataStore;
+import com.hazelnut.cluster.ZooKeeperSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,14 +33,14 @@ public class NodeStartup {
     @Value("${node.data.path.prefix}")
     private String nodeDataPathPrefix;
 
-    private final ZkDataStore clusterData;
+    private final ZooKeeperSession clusterData;
 
     private final DistributedLock distributedLock;
 
     private final Logger logger = LoggerFactory.getLogger(NodeStartup.class);
 
-    public NodeStartup(@Autowired ZkDataStore zkDataStore, @Autowired DistributedLock distributedLock) {
-        this.clusterData = zkDataStore;
+    public NodeStartup(@Autowired ZooKeeperSession zooKeeperSession, @Autowired DistributedLock distributedLock) {
+        this.clusterData = zooKeeperSession;
         this.distributedLock = distributedLock;
     }
 
@@ -59,18 +59,17 @@ public class NodeStartup {
      */
     public void bootStrapNodeAndCluster() {
 
-        try (DistributedLock lock = distributedLock.tryLock()) {
+        try (DistributedLock lock = distributedLock.tryLock();
+             ZooKeeperSession session = clusterData.open()) {
 
-            boolean clusterInitialized = clusterData.getClusterInitStatus(clusterDataPath, false);
+            boolean clusterInitialized = session.getClusterInitStatus(clusterDataPath, false);
 
-            if (!clusterInitialized || !activeNodesInCluster()) {
+            if (!clusterInitialized || !activeNodesInCluster(session)) {
                 logger.info("We are started!");
             }
             if (!clusterInitialized) {
-                clusterData.setClusterInitStatus(clusterDataPath, true);
+                session.setClusterInitStatus(clusterDataPath, true);
             }
-        } catch (Exception e) {
-            logger.warn(e.getMessage(), e);
         }
     }
 
@@ -80,14 +79,14 @@ public class NodeStartup {
      *
      * @return true if any other node is active in cluster
      */
-    private boolean activeNodesInCluster() {
+    private boolean activeNodesInCluster(ZooKeeperSession session) {
         try {
-            List<String> nodeIds = clusterData.getClusterNodes(clusterDataPath);
+            List<String> nodeIds = session.getClusterNodes(clusterDataPath);
 
             Stream<String> siblingNodes = nodeIds.stream()
                     .filter(id -> !id.equals(NODE_ID));
 
-            Optional<Long> latestReportingTime = siblingNodes.map(id -> clusterData.getNodeHeartBeatTime(nodeDataPathPrefix + id, 0L))
+            Optional<Long> latestReportingTime = siblingNodes.map(id -> session.getNodeHeartBeatTime(nodeDataPathPrefix + id, 0L))
                     .max(Comparator.comparing(Long::valueOf));
 
             if (latestReportingTime.isPresent()) {

@@ -1,32 +1,65 @@
 package com.hazelnut.cluster;
 
-import com.hazelnut.utils.ZkClientSupplier;
 import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.imps.CuratorFrameworkState;
+import org.apache.curator.retry.RetryNTimes;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Scope;
 import org.springframework.stereotype.Service;
 
+import java.io.Closeable;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 import static com.hazelnut.utils.DataMapper.*;
+import static org.apache.curator.framework.CuratorFrameworkFactory.newClient;
 
 @Service
 /**
  * Data access layer to fetch or set data from/to ZooKeeper cluster meta
  */
-public class ZkDataStore {
-    private final ZkClientSupplier zkClientSupplier;
-    private final Logger logger = LoggerFactory.getLogger(ZkDataStore.class);
+@Scope("prototype")
+public class ZooKeeperSession implements Closeable {
+    @Value("${client.session.timeout.ms}")
+    private int sessionTimeoutMs;
+
+    @Value("${client.connection.timeout.ms}")
+    private int connectionTimeoutMs;
+
+    @Value("${client.connection.string}")
+    private String connectionString;
+
+    @Value("${client.retry.time.ms}")
+    private int retryTime;
+
+    @Value("${client.retry.attempts.count}")
+    private int numberOfTries;
+
+    private final Logger logger = LoggerFactory.getLogger(ZooKeeperSession.class);
+
+    private CuratorFramework client;
 
 
-    public ZkDataStore(@Autowired ZkClientSupplier zkClientSupplier) {
-        this.zkClientSupplier = zkClientSupplier;
-
+    /**
+     * Open the session with ZooKeeper and establish connection
+     * @return
+     */
+    public ZooKeeperSession open() {
+        this.client = newClient(connectionString, sessionTimeoutMs, connectionTimeoutMs, new RetryNTimes(numberOfTries, retryTime));
+        client.start();
+        try {
+            client.blockUntilConnected();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        return this;
     }
+
 
     /**
      * Checks the startup status of the cluster from Apache ZooKeeper
@@ -36,13 +69,15 @@ public class ZkDataStore {
      * @return True if cluster is already marked as started
      */
     public boolean getClusterInitStatus(String clusterStatusPath, boolean fallBackValue) {
+        checkConnectivity();
         byte[] data;
-        try (CuratorFramework client = zkClientSupplier.newZkClient()) {
+        try {
             data = client.getData().forPath(clusterStatusPath);
             return data != null && bytesToBoolean(data);
         } catch (KeeperException.NoNodeException e) {
             logger.info("Cluster status never reported. Thus unable to fetch status.");
             logger.warn(e.getMessage());
+
         } catch (Exception e) {
             logger.warn(e.getMessage(), e);
         }
@@ -56,9 +91,11 @@ public class ZkDataStore {
      * @param status
      */
     public void setClusterInitStatus(String clusterStatusPath, boolean status) {
+        checkConnectivity();
         byte[] data = booleanToBytes(status);
-        try (CuratorFramework client = zkClientSupplier.newZkClient()) {
+        try {
             client.create().orSetData().creatingParentContainersIfNeeded().forPath(clusterStatusPath, data);
+            logger.warn("Cluster starup status is updated in ZooKeeper");
         } catch (Exception e) {
             logger.warn(e.getMessage(), e);
         }
@@ -71,8 +108,9 @@ public class ZkDataStore {
      * @return list of nodes ids
      */
     public List<String> getClusterNodes(String clusterPath) {
+        checkConnectivity();
         List<String> nodes = null;
-        try (CuratorFramework client = zkClientSupplier.newZkClient()) {
+        try {
             nodes = client.getChildren().forPath(clusterPath);
         } catch (KeeperException.NoNodeException ex) {
             logger.warn("No connected nodes data retrieved. As no node recently reported within data ttl time.");
@@ -91,8 +129,9 @@ public class ZkDataStore {
      * @return node's latest health reporting time
      */
     public long getNodeHeartBeatTime(String nodePath, long fallBackValue) {
+        checkConnectivity();
         byte[] data = null;
-        try (CuratorFramework client = zkClientSupplier.newZkClient()) {
+        try {
             data = client.getData().forPath(nodePath);
         } catch (KeeperException.NoNodeException e) {
             logger.warn("Heart beats are either not recorded by other nodes or got removed as per ttl.");
@@ -111,7 +150,8 @@ public class ZkDataStore {
      * @param ttl        i.e. time to live for this data, as we don't need older records to establish cluster's health later
      */
     public void setNodeHeartBeatTime(String nodePath, long timeMillis, long ttl) {
-        try (CuratorFramework client = zkClientSupplier.newZkClient()) {
+        checkConnectivity();
+        try {
             if (ttl > 0) {
                 client.create().orSetData().withTtl(ttl).creatingParentContainersIfNeeded().withMode(CreateMode.PERSISTENT_WITH_TTL).forPath(nodePath, longToBytes(timeMillis));
             } else {
@@ -122,4 +162,31 @@ public class ZkDataStore {
         }
     }
 
+
+    /**
+     * checks if the connection is established with ZooKeeper
+     *
+     * @throws IllegalStateException
+     */
+    private void checkConnectivity() throws IllegalStateException {
+        Objects.requireNonNull(client);
+        if (client.getState() != CuratorFrameworkState.STARTED) {
+            throw new IllegalStateException("Client connection is not established.");
+        }
+
+    }
+
+    @Override
+    /**
+     * close connection and session with ZooKeeper
+     */
+    public void close() {
+        if (this.client != null && client.getState() != CuratorFrameworkState.STOPPED) {
+            this.client.close();
+        }
+    }
+
+    public CuratorFramework getClient() {
+        return client;
+    }
 }

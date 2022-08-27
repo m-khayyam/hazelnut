@@ -2,10 +2,9 @@ package com.hazelnut.node.preps;
 
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import com.hazelnut.cluster.DistributedLock;
-import com.hazelnut.cluster.ZkDataStore;
+import com.hazelnut.cluster.ZooKeeperSession;
 import com.hazelnut.node.NodeLivenessReporter;
 import com.hazelnut.node.NodeStartup;
-import com.hazelnut.utils.ZkClientSupplier;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -22,13 +21,10 @@ import static org.mockito.Mockito.times;
 public class NodeStartUpTestUtils extends CommonTestUtils {
 
     @MockBean
-    protected ZkClientSupplier zkClientSupplier;
-
-    @MockBean
     protected DistributedLock distributedLock;
 
     @MockBean
-    protected ZkDataStore clusterData;
+    protected ZooKeeperSession session;
 
     @MockBean
     protected NodeLivenessReporter reporter;
@@ -37,7 +33,7 @@ public class NodeStartUpTestUtils extends CommonTestUtils {
     protected NodeStartup service;
 
     protected void mockThatClusterStatusIs(boolean value) {
-        Mockito.when(clusterData.getClusterInitStatus(anyString(), anyBoolean())).thenReturn(value);
+        Mockito.when(session.getClusterInitStatus(anyString(), anyBoolean())).thenReturn(value);
     }
 
     protected void verifyThatLogsWrite(String message, int expected, Stream<ILoggingEvent> logsWritten) {
@@ -53,22 +49,26 @@ public class NodeStartUpTestUtils extends CommonTestUtils {
     }
 
     protected void verifyThatClusterStartedFlagIsUpdated(int count) {
-        Mockito.verify(clusterData, times(count)).setClusterInitStatus(anyString(), anyBoolean());
+        Mockito.verify(session, times(count)).setClusterInitStatus(anyString(), anyBoolean());
+    }
+
+    protected void mockZooKeeperSession() {
+        Mockito.when(session.open()).thenReturn(session);
     }
 
     protected void mockSiblingNodesAreNotConnected() {
-        Mockito.when(clusterData.getClusterNodes(anyString())).thenReturn(Arrays.asList(NODE_ID, "siblingNode"));
-        Mockito.when(clusterData.getNodeHeartBeatTime(anyString(), anyLong())).thenReturn(Long.valueOf(0));
+        Mockito.when(session.getClusterNodes(anyString())).thenReturn(Arrays.asList(NODE_ID, "siblingNode"));
+        Mockito.when(session.getNodeHeartBeatTime(anyString(), anyLong())).thenReturn(Long.valueOf(0));
     }
 
     protected void mockSiblingNodesAreConnectedAndReporting() {
-        Mockito.when(clusterData.getClusterNodes(anyString())).thenReturn(Arrays.asList(NODE_ID, "siblingNode"));
-        Mockito.when(clusterData.getNodeHeartBeatTime(anyString(), anyLong())).thenReturn(Instant.now().toEpochMilli());
+        Mockito.when(session.getClusterNodes(anyString())).thenReturn(Arrays.asList(NODE_ID, "siblingNode"));
+        Mockito.when(session.getNodeHeartBeatTime(anyString(), anyLong())).thenReturn(Instant.now().toEpochMilli());
     }
 
     protected void verifyThatSiblingNodesAreEnquired(int count) {
-        Mockito.verify(clusterData, times(count)).getClusterNodes(anyString());
-        Mockito.verify(clusterData, times(count)).getNodeHeartBeatTime(anyString(), anyLong());
+        Mockito.verify(session, times(count)).getClusterNodes(anyString());
+        Mockito.verify(session, times(count)).getNodeHeartBeatTime(anyString(), anyLong());
 
     }
 }

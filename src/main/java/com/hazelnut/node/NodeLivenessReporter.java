@@ -1,6 +1,6 @@
 package com.hazelnut.node;
 
-import com.hazelnut.cluster.ZkDataStore;
+import com.hazelnut.cluster.ZooKeeperSession;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,10 +15,10 @@ import static com.hazelnut.HazelNutApplication.NODE_ID;
 
 @Service
 public class NodeLivenessReporter {
-    private ZkDataStore zkDataStore;
+    private final ZooKeeperSession zooKeeperSession;
 
-    public NodeLivenessReporter(@Autowired ZkDataStore zkDataStore) {
-        this.zkDataStore = zkDataStore;
+    public NodeLivenessReporter(@Autowired ZooKeeperSession zooKeeperSession) {
+        this.zooKeeperSession = zooKeeperSession;
     }
 
     @Value("${cluster.nodes.liveness.ttl.ms}")
@@ -39,8 +39,9 @@ public class NodeLivenessReporter {
      * Report the heart beat to ZooKeeper after every fixed delay
      */
     public void reportHeartBeatToCluster() {
-        zkDataStore.setNodeHeartBeatTime(nodeDataPathPrefix + NODE_ID, Instant.now().toEpochMilli(), ttl);
-        logger.info("Published heartbeat to zookeeper");
+        try (ZooKeeperSession session = zooKeeperSession.open()) {
+            session.setNodeHeartBeatTime(nodeDataPathPrefix + NODE_ID, Instant.now().toEpochMilli(), ttl);
+            logger.info("Published heartbeat to zookeeper");
+        }
     }
-
 }

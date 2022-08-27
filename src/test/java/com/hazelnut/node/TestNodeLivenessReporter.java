@@ -5,6 +5,7 @@ import com.hazelnut.node.preps.NodeLivenessReporterTestUtils;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.runner.RunWith;
+import org.mockito.Mockito;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
@@ -24,6 +25,8 @@ class TestNodeLivenessReporter extends NodeLivenessReporterTestUtils {
     void testNodeAcquiresDistributedLockAndPerformsStartup() {
         Stream<ILoggingEvent> logsWritten = captureLogsForAppStartUpService(NodeLivenessReporter.class);
 
+        mockZooKeeperSession();
+
         reporter.reportHeartBeatToCluster();
 
         verifyThatLogsWrite("Published heartbeat to zookeeper", EXACTLY_ONCE, logsWritten);
@@ -31,6 +34,4 @@ class TestNodeLivenessReporter extends NodeLivenessReporterTestUtils {
         verifyHeartBeatCallIsMade();
 
     }
-
-
 }

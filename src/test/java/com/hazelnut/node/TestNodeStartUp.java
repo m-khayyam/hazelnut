@@ -23,6 +23,7 @@ class TestNodeStartUp extends NodeStartUpTestUtils {
     void testNodeAcquiresDistributedLockAndPerformsStartup() {
         Stream<ILoggingEvent> logsWritten = captureLogsForAppStartUpService(NodeStartup.class);
 
+        mockZooKeeperSession();
         mockTheDistributedLock();
         mockThatClusterStatusIs(NOT_STARTED);
 
@@ -41,6 +42,7 @@ class TestNodeStartUp extends NodeStartUpTestUtils {
     void testNodeAcquiresDistributedLockAndClusterIsAlreadyStarted() {
         Stream<ILoggingEvent> logsWritten = captureLogsForAppStartUpService(NodeStartup.class);
 
+        mockZooKeeperSession();
         mockTheDistributedLock();
         mockThatClusterStatusIs(STARTED);
         mockSiblingNodesAreConnectedAndReporting();
@@ -58,6 +60,7 @@ class TestNodeStartUp extends NodeStartUpTestUtils {
     void testNodeAcquiresDistributedLockAndClusterIsRestarted() {
         Stream<ILoggingEvent> logsWritten = captureLogsForAppStartUpService(NodeStartup.class);
 
+        mockZooKeeperSession();
         mockTheDistributedLock();
         mockThatClusterStatusIs(STARTED);
         mockSiblingNodesAreNotConnected();
