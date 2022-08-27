@@ -16,15 +16,14 @@ import java.util.stream.Stream;
 @SpringBootTest
 @RunWith(SpringRunner.class)
 @ExtendWith(SpringExtension.class)
-class NodeStartUpTest extends NodeStartUpTestUtils {
+class TestNodeStartUp extends NodeStartUpTestUtils {
 
     @Test
     //Cluster starting first time and this node gets lock to bootstrap
-    void testNodeAcquiresDistributedLockAndPerformsStartup() throws Exception {
+    void testNodeAcquiresDistributedLockAndPerformsStartup() {
         Stream<ILoggingEvent> logsWritten = captureLogsForAppStartUpService(NodeStartup.class);
 
-        mockLockIsAcquired();
-
+        mockTheDistributedLock();
         mockThatClusterStatusIs(NOT_STARTED);
 
         service.bootStrapNodeAndCluster();
@@ -36,54 +35,39 @@ class NodeStartUpTest extends NodeStartUpTestUtils {
         verifyThatLockIsReleased();
     }
 
-    @Test
-    //Cluster starting first time and this node fails to lock but proceed with job
-    void testNodeFailsToAcquiresDistributedLockAndPerformsStartup() throws Exception {
-        Stream<ILoggingEvent> logsWritten = captureLogsForAppStartUpService(NodeStartup.class);
-
-        mockLockAcquiringFails();
-
-        mockThatClusterStatusIs(NOT_STARTED);
-
-        service.bootStrapNodeAndCluster();
-
-        verifyThatLogsWrite("We are started!", EXACTLY_ONCE, logsWritten);
-
-        verifyThatClusterStartedFlagIsUpdated(EXACTLY_ONCE);
-        verifyThatSiblingNodesAreEnquired(NEVER);
-    }
 
     @Test
     //Cluster is once started and sibling nodes are healthy
-    void testNodeAcquiresDistributedLockAndClusterIsAlreadyStarted() throws Exception {
+    void testNodeAcquiresDistributedLockAndClusterIsAlreadyStarted() {
         Stream<ILoggingEvent> logsWritten = captureLogsForAppStartUpService(NodeStartup.class);
 
+        mockTheDistributedLock();
         mockThatClusterStatusIs(STARTED);
-        mockSibllingNodesAreConnectedAndReporting();
+        mockSiblingNodesAreConnectedAndReporting();
 
         service.bootStrapNodeAndCluster();
 
         verifyThatLogsWrite("We are started!", NEVER, logsWritten);
-
         verifyThatClusterStartedFlagIsUpdated(NEVER);
         verifyThatSiblingNodesAreEnquired(EXACTLY_ONCE);
-        verifyThatLockWasNotRequired();
+        verifyThatLockIsReleased();
     }
 
     @Test
-    // Cluster already started once, but sibling node not responding and this nodes gets up
-    void testNodeAcquiresDistributedLockAndClusterIsRestarted() throws Exception {
+    // Cluster already started once, but sibling node not responding
+    void testNodeAcquiresDistributedLockAndClusterIsRestarted() {
         Stream<ILoggingEvent> logsWritten = captureLogsForAppStartUpService(NodeStartup.class);
 
+        mockTheDistributedLock();
         mockThatClusterStatusIs(STARTED);
-        mockSibllingNodesAreNotConnected();
+        mockSiblingNodesAreNotConnected();
 
         service.bootStrapNodeAndCluster();
 
         verifyThatLogsWrite("We are started!", EXACTLY_ONCE, logsWritten);
-        verifyThatLockWasNotRequired();
         verifyThatClusterStartedFlagIsUpdated(NEVER);
         verifyThatSiblingNodesAreEnquired(EXACTLY_ONCE);
+        verifyThatLockIsReleased();
     }
 
     @Configuration

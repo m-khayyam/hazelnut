@@ -3,7 +3,7 @@ package com.hazelnut.node.preps;
 import com.hazelnut.cluster.ZkDataStore;
 import com.hazelnut.node.NodeLivenessReporter;
 import com.hazelnut.node.NodeStartup;
-import com.hazelnut.utils.ZkConnectionManager;
+import com.hazelnut.utils.ZkClientSupplier;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -15,7 +15,7 @@ import static org.mockito.Mockito.times;
 public class NodeLivenessReporterTestUtils extends CommonTestUtils {
 
     @MockBean
-    protected ZkConnectionManager zkConnectionManager;
+    protected ZkClientSupplier zkClientSupplier;
 
     @MockBean
     protected ZkDataStore zkDataStore;
@@ -27,8 +27,8 @@ public class NodeLivenessReporterTestUtils extends CommonTestUtils {
     protected NodeLivenessReporter reporter;
 
 
-    protected void verifyHeartBeatCallIsMade(int count) {
-        Mockito.verify(zkDataStore, times(count)).setNodeHeartBeatTime(anyString(), anyLong(), anyLong());
+    protected void verifyHeartBeatCallIsMade() {
+        Mockito.verify(zkDataStore, times(EXACTLY_ONCE)).setNodeHeartBeatTime(anyString(), anyLong(), anyLong());
     }
 
 }

@@ -1,13 +1,16 @@
 package com.hazelnut.cluster;
 
-import com.hazelnut.utils.ZkConnectionManager;
+import com.hazelnut.utils.ZkClientSupplier;
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.imps.CuratorFrameworkState;
 import org.apache.curator.framework.recipes.locks.InterProcessMutex;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.DisposableBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+
+import java.io.Closeable;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
@@ -16,7 +19,7 @@ import static java.util.concurrent.TimeUnit.MILLISECONDS;
  * Distributed lock is a wrapper service over InterProcessMutex from curator framework
  * It provides the cluster level locking using Apache ZooKeeper locking service
  */
-public class DistributedLock implements DisposableBean {
+public class DistributedLock implements Closeable {
 
     @Value("${distributed.lock.path}")
     private String lockPath;
@@ -24,48 +27,67 @@ public class DistributedLock implements DisposableBean {
     @Value("${distributed.lock.timeout.ms}")
     private long timeoutMillis;
 
-    private ZkConnectionManager zkConnectionManager;
+    private final ZkClientSupplier zkClientSupplier;
 
     InterProcessMutex lock = null;
 
-    private Logger logger = LoggerFactory.getLogger(DistributedLock.class);
+    CuratorFramework client;
+    private final Logger logger = LoggerFactory.getLogger(DistributedLock.class);
 
-    public DistributedLock(@Autowired ZkConnectionManager zkConnectionManager) {
-        this.zkConnectionManager = zkConnectionManager;
+    public DistributedLock(@Autowired ZkClientSupplier zkClientSupplier) {
+        this.zkClientSupplier = zkClientSupplier;
 
     }
 
     /**
      * try acquiring the distributed lock
      * try times out as per configured time
+     * DistributedLock is reentrant
+     * trylock is idempodent
+     * lock needs zookeeper connection. connection is not closeable in same block, but after releasing lock
      */
-    public boolean tryLock() {
-        try {
-            lock = lock == null ? new InterProcessMutex(zkConnectionManager.activeConnection(), lockPath) : lock;
-            return lock.isAcquiredInThisProcess() || lock.acquire(timeoutMillis, MILLISECONDS);
-        } catch (Exception e) {
-            logger.warn(e.getMessage(), e);
+    public DistributedLock tryLock() {
+        if (client == null || client.getState() == CuratorFrameworkState.STOPPED) {
+            client = zkClientSupplier.newZkClient();
         }
-        return false;
+        if (lock == null) {
+            lock = new InterProcessMutex(client, lockPath);
+        }
+        if (!lock.isAcquiredInThisProcess()) {
+            try {
+                lock.acquire(timeoutMillis, MILLISECONDS);
+            } catch (Exception e) {
+                logger.warn(e.getMessage(), e);
+            }
+        }
+
+        return this;
     }
 
     /**
      * release the distributed lock
+     * close the client connection used for lock
      */
-    public void releaseLock() {
+    public void releaseIfLocked() {
+
         if (lock != null && lock.isAcquiredInThisProcess()) {
             try {
                 lock.release();
             } catch (Exception e) {
                 logger.warn(e.getMessage(), e);
             }
+            if (client != null) {
+                client.close();
+            }
         }
     }
 
     @Override
-    public void destroy() throws Exception {
-        releaseLock();
+    /**
+     * auto release the lock in try with resource block
+     */
+    public void close() {
+        releaseIfLocked();
     }
-
 
 }

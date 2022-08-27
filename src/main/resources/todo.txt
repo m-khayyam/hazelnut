@@ -1,3 +1,0 @@
-Unit Test
-better exception handling
-read me -> principles, logic, flow, todos

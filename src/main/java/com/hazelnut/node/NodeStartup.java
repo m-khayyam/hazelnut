@@ -33,11 +33,11 @@ public class NodeStartup {
     @Value("${node.data.path.prefix}")
     private String nodeDataPathPrefix;
 
-    private ZkDataStore clusterData;
+    private final ZkDataStore clusterData;
 
-    private DistributedLock distributedLock;
+    private final DistributedLock distributedLock;
 
-    private Logger logger = LoggerFactory.getLogger(NodeStartup.class);
+    private final Logger logger = LoggerFactory.getLogger(NodeStartup.class);
 
     public NodeStartup(@Autowired ZkDataStore zkDataStore, @Autowired DistributedLock distributedLock) {
         this.clusterData = zkDataStore;
@@ -45,21 +45,23 @@ public class NodeStartup {
     }
 
     /**
-     * No Starts up and checks if cluster is already started other nodes are connected to it
-     * if cluster never started OR other nodes not connected and this is one is only in starting phase then serve starup message
-     * <p>
+     * This method checks at cluster level and serve startup message if yet pending for cluster
+     * <br/>
+     * <br/>
+     * It do the welcome job if:<br/>
+     * (1) Cluster is never marked as started<br/>
+     * (2) Cluster is marked as started already but now no other node is connected. Thus getting this node up is kind of restart<br/>
+     * (3) the node is unable to connect to cluster due to network issue
+     * <br/>
+     * <br/>
      * Please note that in case of network failure or lock failure, we want to proceed with startup message
      * Thus ideally taking lock and checking status first, but in case of problems proceeding to print
      */
     public void bootStrapNodeAndCluster() {
 
-        boolean clusterInitialized = clusterData.getClusterInitStatus(clusterDataPath, false);
-        boolean lockAcquired = false;
-        try {
-            if (!clusterInitialized) {
-                lockAcquired = distributedLock.tryLock();
-                clusterInitialized = clusterData.getClusterInitStatus(clusterDataPath, false);
-            }
+        try (DistributedLock lock = distributedLock.tryLock()) {
+
+            boolean clusterInitialized = clusterData.getClusterInitStatus(clusterDataPath, false);
 
             if (!clusterInitialized || !activeNodesInCluster()) {
                 logger.info("We are started!");
@@ -69,10 +71,6 @@ public class NodeStartup {
             }
         } catch (Exception e) {
             logger.warn(e.getMessage(), e);
-        } finally {
-            if (lockAcquired) {
-                distributedLock.releaseLock();
-            }
         }
     }
 
@@ -89,11 +87,11 @@ public class NodeStartup {
             Stream<String> siblingNodes = nodeIds.stream()
                     .filter(id -> !id.equals(NODE_ID));
 
-            Optional<Long> latestReportingTime = siblingNodes.map(id -> clusterData.getNodeHeartBeatTime(nodeDataPathPrefix + id, 0l))
+            Optional<Long> latestReportingTime = siblingNodes.map(id -> clusterData.getNodeHeartBeatTime(nodeDataPathPrefix + id, 0L))
                     .max(Comparator.comparing(Long::valueOf));
 
             if (latestReportingTime.isPresent()) {
-                Long gap = Instant.now().toEpochMilli() - latestReportingTime.get();
+                long gap = Instant.now().toEpochMilli() - latestReportingTime.get();
                 if (gap < clusterivenessThreshold) {
                     return true;
                 }

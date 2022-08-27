@@ -1,6 +1,7 @@
 package com.hazelnut.cluster;
 
-import com.hazelnut.utils.ZkConnectionManager;
+import com.hazelnut.utils.ZkClientSupplier;
+import org.apache.curator.framework.CuratorFramework;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
 import org.slf4j.Logger;
@@ -18,12 +19,12 @@ import static com.hazelnut.utils.DataMapper.*;
  * Data access layer to fetch or set data from/to ZooKeeper cluster meta
  */
 public class ZkDataStore {
-    private ZkConnectionManager zkConnectionManager;
-    private Logger logger = LoggerFactory.getLogger(ZkDataStore.class);
+    private final ZkClientSupplier zkClientSupplier;
+    private final Logger logger = LoggerFactory.getLogger(ZkDataStore.class);
 
 
-    public ZkDataStore(@Autowired ZkConnectionManager zkConnectionManager) {
-        this.zkConnectionManager = zkConnectionManager;
+    public ZkDataStore(@Autowired ZkClientSupplier zkClientSupplier) {
+        this.zkClientSupplier = zkClientSupplier;
 
     }
 
@@ -35,9 +36,9 @@ public class ZkDataStore {
      * @return True if cluster is already marked as started
      */
     public boolean getClusterInitStatus(String clusterStatusPath, boolean fallBackValue) {
-        byte[] data = null;
-        try {
-            data = zkConnectionManager.activeConnection().getData().forPath(clusterStatusPath);
+        byte[] data;
+        try (CuratorFramework client = zkClientSupplier.newZkClient()) {
+            data = client.getData().forPath(clusterStatusPath);
             return data != null && bytesToBoolean(data);
         } catch (KeeperException.NoNodeException e) {
             logger.info("Cluster status never reported. Thus unable to fetch status.");
@@ -56,8 +57,8 @@ public class ZkDataStore {
      */
     public void setClusterInitStatus(String clusterStatusPath, boolean status) {
         byte[] data = booleanToBytes(status);
-        try {
-            zkConnectionManager.activeConnection().create().orSetData().creatingParentContainersIfNeeded().forPath(clusterStatusPath, data);
+        try (CuratorFramework client = zkClientSupplier.newZkClient()) {
+            client.create().orSetData().creatingParentContainersIfNeeded().forPath(clusterStatusPath, data);
         } catch (Exception e) {
             logger.warn(e.getMessage(), e);
         }
@@ -68,16 +69,14 @@ public class ZkDataStore {
      *
      * @param clusterPath
      * @return list of nodes ids
-     * @throws Exception
      */
-    public List<String> getClusterNodes(String clusterPath) throws Exception {
+    public List<String> getClusterNodes(String clusterPath) {
         List<String> nodes = null;
-        try {
-            nodes = zkConnectionManager.activeConnection().getChildren().forPath(clusterPath);
-        } catch (KeeperException.NoNodeException | KeeperException.SessionExpiredException ex) {
-            logger.warn(ex.getMessage(), ex);
-        } catch (IllegalStateException e) {
-            zkConnectionManager.resetConnection();
+        try (CuratorFramework client = zkClientSupplier.newZkClient()) {
+            nodes = client.getChildren().forPath(clusterPath);
+        } catch (KeeperException.NoNodeException ex) {
+            logger.warn("No connected nodes data retrieved. As no node recently reported within data ttl time.");
+            logger.warn(ex.getMessage());
         } catch (Exception e) {
             logger.warn(e.getMessage(), e);
         }
@@ -91,15 +90,13 @@ public class ZkDataStore {
      * @param fallBackValue
      * @return node's latest health reporting time
      */
-    public Long getNodeHeartBeatTime(String nodePath, Long fallBackValue) {
+    public long getNodeHeartBeatTime(String nodePath, long fallBackValue) {
         byte[] data = null;
-        try {
-            data = zkConnectionManager.activeConnection().getData().forPath(nodePath);
+        try (CuratorFramework client = zkClientSupplier.newZkClient()) {
+            data = client.getData().forPath(nodePath);
         } catch (KeeperException.NoNodeException e) {
             logger.warn("Heart beats are either not recorded by other nodes or got removed as per ttl.");
             logger.warn(e.getMessage());
-        } catch (IllegalStateException e) {
-            zkConnectionManager.resetConnection();
         } catch (Exception e) {
             logger.warn(e.getMessage(), e);
         }
@@ -112,17 +109,14 @@ public class ZkDataStore {
      * @param nodePath
      * @param timeMillis
      * @param ttl        i.e. time to live for this data, as we don't need older records to establish cluster's health later
-     * @throws IllegalStateException
      */
-    public void setNodeHeartBeatTime(String nodePath, long timeMillis, long ttl) throws IllegalStateException {
-        try {
+    public void setNodeHeartBeatTime(String nodePath, long timeMillis, long ttl) {
+        try (CuratorFramework client = zkClientSupplier.newZkClient()) {
             if (ttl > 0) {
-                zkConnectionManager.activeConnection().create().orSetData().withTtl(ttl).creatingParentContainersIfNeeded().withMode(CreateMode.PERSISTENT_WITH_TTL).forPath(nodePath, longToBytes(timeMillis));
+                client.create().orSetData().withTtl(ttl).creatingParentContainersIfNeeded().withMode(CreateMode.PERSISTENT_WITH_TTL).forPath(nodePath, longToBytes(timeMillis));
             } else {
-                zkConnectionManager.activeConnection().create().orSetData().creatingParentContainersIfNeeded().forPath(nodePath, longToBytes(timeMillis));
+                client.create().orSetData().creatingParentContainersIfNeeded().forPath(nodePath, longToBytes(timeMillis));
             }
-        } catch (IllegalStateException e) {
-            zkConnectionManager.resetConnection();
         } catch (Exception e) {
             logger.warn(e.getMessage(), e);
         }

@@ -16,19 +16,19 @@ import java.util.stream.Stream;
 @RunWith(SpringRunner.class)
 @ExtendWith(SpringExtension.class)
 @SpringJUnitConfig(NodeLivenessReporter.class)
-class NodeLivenessReporterTest extends NodeLivenessReporterTestUtils {
+class TestNodeLivenessReporter extends NodeLivenessReporterTestUtils {
 
 
     @Test
-    //Node records its presence to cluster by publishing heartbeat time
-      void testNodeAcquiresDistributedLockAndPerformsStartup() throws Exception {
+        //Node records its presence to cluster by publishing heartbeat time
+    void testNodeAcquiresDistributedLockAndPerformsStartup() {
         Stream<ILoggingEvent> logsWritten = captureLogsForAppStartUpService(NodeLivenessReporter.class);
 
         reporter.reportHeartBeatToCluster();
 
         verifyThatLogsWrite("Published heartbeat to zookeeper", EXACTLY_ONCE, logsWritten);
 
-        verifyHeartBeatCallIsMade(EXACTLY_ONCE);
+        verifyHeartBeatCallIsMade();
 
     }
 
