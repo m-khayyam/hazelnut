@@ -27,8 +27,12 @@ public class NodeLivenessReporterTestUtils extends CommonTestUtils {
         Mockito.when(zooKeeperSession.open()).thenReturn(zooKeeperSession);
     }
 
-    protected void verifyHeartBeatCallIsMade() {
-        Mockito.verify(zooKeeperSession, times(EXACTLY_ONCE)).setNodeHeartBeatTime(anyString(), anyLong(), anyLong());
+    protected void verifyHeartBeatCallIsMade(int count) {
+        Mockito.verify(zooKeeperSession, times(count)).markClusterAsActive(anyString(), anyLong());
+    }
+
+    protected void mockThatNodeIs(boolean status) {
+        Mockito.when(nodeStartup.isNodeStarted()).thenReturn(status);
     }
 
 }

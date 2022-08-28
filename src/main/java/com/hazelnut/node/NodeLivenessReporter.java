@@ -9,39 +9,35 @@ import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import java.time.Instant;
-
-import static com.hazelnut.HazelNutApplication.NODE_ID;
-
 @Service
 public class NodeLivenessReporter {
-    private final ZooKeeperSession zooKeeperSession;
-
-    public NodeLivenessReporter(@Autowired ZooKeeperSession zooKeeperSession) {
-        this.zooKeeperSession = zooKeeperSession;
-    }
-
     @Value("${cluster.nodes.liveness.ttl.ms}")
     private long ttl;
 
-    @Value("${node.data.path.prefix}")
-    private String dataPath;
+    @Value("${cluster.status.data.path}")
+    private String clusterActivityTimeRefPath;
 
-
-    @Value("${node.data.path.prefix}")
-    private String nodeDataPathPrefix;
+    private final ZooKeeperSession zooKeeperSession;
+    private final NodeStartup node;
 
     Logger logger = LoggerFactory.getLogger(NodeLivenessReporter.class);
+
+    public NodeLivenessReporter(@Autowired ZooKeeperSession zooKeeperSession, @Autowired NodeStartup node) {
+        this.zooKeeperSession = zooKeeperSession;
+        this.node = node;
+    }
 
     @Scheduled(fixedDelayString = "${node.liveness.reporting.time.ms}")
     @Async
     /**
      * Report the heart beat to ZooKeeper after every fixed delay
      */
-    public void reportHeartBeatToCluster() {
-        try (ZooKeeperSession session = zooKeeperSession.open()) {
-            session.setNodeHeartBeatTime(nodeDataPathPrefix + NODE_ID, Instant.now().toEpochMilli(), ttl);
-            logger.info("Published heartbeat to zookeeper");
+    public void updateClusterStatus() {
+        if (node.isNodeStarted()) {
+            try (ZooKeeperSession session = zooKeeperSession.open()) {
+                session.markClusterAsActive(clusterActivityTimeRefPath, ttl);
+                logger.info("Updated cluster status as active.");
+            }
         }
     }
 }

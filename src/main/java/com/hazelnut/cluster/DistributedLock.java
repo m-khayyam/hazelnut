@@ -32,7 +32,6 @@ public class DistributedLock implements Closeable {
 
     public DistributedLock(@Autowired ZooKeeperSession session) {
         this.session = session;
-
     }
 
     /**
@@ -54,7 +53,6 @@ public class DistributedLock implements Closeable {
                 logger.warn(e.getMessage(), e);
             }
         }
-
         return this;
     }
 

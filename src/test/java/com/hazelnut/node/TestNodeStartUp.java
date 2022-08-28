@@ -25,14 +25,32 @@ class TestNodeStartUp extends NodeStartUpTestUtils {
 
         mockZooKeeperSession();
         mockTheDistributedLock();
-        mockThatClusterStatusIs(NOT_STARTED);
+        mockThatClusterStatusIs(NOT_STARTED, AND_AGAIN_NOT_STARTED);
 
         service.bootStrapNodeAndCluster();
 
         verifyThatLogsWrite("We are started!", EXACTLY_ONCE, logsWritten);
 
         verifyThatClusterStartedFlagIsUpdated(EXACTLY_ONCE);
-        verifyThatSiblingNodesAreEnquired(NEVER);
+        verifyThatClusterStatusIsChecked(TWICE);
+        verifyThatLockIsReleased();
+    }
+
+    @Test
+    //Cluster starting first time and this node gets lock to bootstrap
+    void testNodeAcquiresDistributedLockAndPerformsStartup1() {
+        Stream<ILoggingEvent> logsWritten = captureLogsForAppStartUpService(NodeStartup.class);
+
+        mockZooKeeperSession();
+        mockTheDistributedLock();
+        mockThatClusterStatusIs(NOT_STARTED, BUT_THEN_STARTED);
+
+        service.bootStrapNodeAndCluster();
+
+        verifyThatLogsWrite("We are started!", NEVER, logsWritten);
+
+        verifyThatClusterStartedFlagIsUpdated(NEVER);
+        verifyThatClusterStatusIsChecked(TWICE);
         verifyThatLockIsReleased();
     }
 
@@ -45,33 +63,15 @@ class TestNodeStartUp extends NodeStartUpTestUtils {
         mockZooKeeperSession();
         mockTheDistributedLock();
         mockThatClusterStatusIs(STARTED);
-        mockSiblingNodesAreConnectedAndReporting();
 
         service.bootStrapNodeAndCluster();
 
         verifyThatLogsWrite("We are started!", NEVER, logsWritten);
+        verifyThatClusterStatusIsChecked(EXACTLY_ONCE);
         verifyThatClusterStartedFlagIsUpdated(NEVER);
-        verifyThatSiblingNodesAreEnquired(EXACTLY_ONCE);
-        verifyThatLockIsReleased();
+        verifyThatLockWasNotRequiredOrTried();
     }
 
-    @Test
-    // Cluster already started once, but sibling node not responding
-    void testNodeAcquiresDistributedLockAndClusterIsRestarted() {
-        Stream<ILoggingEvent> logsWritten = captureLogsForAppStartUpService(NodeStartup.class);
-
-        mockZooKeeperSession();
-        mockTheDistributedLock();
-        mockThatClusterStatusIs(STARTED);
-        mockSiblingNodesAreNotConnected();
-
-        service.bootStrapNodeAndCluster();
-
-        verifyThatLogsWrite("We are started!", EXACTLY_ONCE, logsWritten);
-        verifyThatClusterStartedFlagIsUpdated(NEVER);
-        verifyThatSiblingNodesAreEnquired(EXACTLY_ONCE);
-        verifyThatLockIsReleased();
-    }
 
     @Configuration
     @Import(NodeStartup.class)
