@@ -26,7 +26,7 @@ public class DistributedLock implements Closeable {
 
     private final ZooKeeperSession session;
 
-    InterProcessMutex lock = null;
+    private InterProcessMutex lock = null;
 
     private final Logger logger = LoggerFactory.getLogger(DistributedLock.class);
 
