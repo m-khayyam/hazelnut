@@ -14,8 +14,6 @@ import javax.annotation.PostConstruct;
 @ComponentScan(basePackages = "com.hazelnut")
 public class HazelNutApplication {
 
-    public static final String NODE_ID = java.util.UUID.randomUUID().toString();
-
     public static void main(String[] args) {
         SpringApplication.run(HazelNutApplication.class, args);
     }

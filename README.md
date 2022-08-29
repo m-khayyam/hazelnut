@@ -1,7 +1,7 @@
 # Hazelnut
 
 
-Hazelnut is a process to run on each node in cluster and to perform start-up activity once in cluster lifetime
+Hazelnut is a process to run on each node in cluster and to perform start-up activity once in cluster lifetime. It also keep updating the cluster status after fixed delay. 
 
 # Requirement Specification
 
@@ -20,8 +20,12 @@ Please Note that it was advised in answer to questions:<br/>
 
 # Implementation
 
-Please have a look at flow chart of implementation. <a>https://github.com/m-khayyam/hazelnut/blob/main/src/main/resources/hazelnut-startup-flow.jpeg
+Please have a look at flow chart of implementation. 
+
 <br/><br/>
+![aa](https://raw.githubusercontent.com/m-khayyam/hazelnut/main/src/main/resources/hazelnut-startup-flow.jpeg)
+<br/><br/>
+
 - Apache ZooKeeper is used as cluster's center point.<br/>
 - Curator API is used for simple communication with ZooKeeper<br/>
 - DistributedLock.java and ZooKeeperSession.java are wrappers on CuratorFramework APIs for simplicity.<br/>
@@ -31,6 +35,12 @@ In following scenarios the starting up node prints welcome message:
 - Cluster is marked as started before but now no other node is connected. Thus getting this node up is kind of restart<br/>
 - The node is unable to connect to cluster due to network issue.
 </a>
+# Implementation Limitations or Pending Work
+- No authentication on ZooKeeper Connectivity
+- Properties are not validated
+- Rest of the code is unit tested but not ZooKeeperSession(part of project not third party). Short of time.
+- Caveat: Catched **Exception** multiple places because Curator Framework or ZooKeeper throw Exception instead of specific exceptions.
+- Caveat: Exceptions are mostly just logged and handled within the methods. Because flow is supposed to continue pessimistically(network issue => cluster not up). And the caller don't need to decide anything on exception. 
 
   
 # Application and ZooKeeper Server Startup Guide
@@ -43,4 +53,3 @@ In following scenarios the starting up node prints welcome message:
 
 - Set the properties for Hazelnut process in application.properties as desired. Make sure zookeeper port is sat as same as in zoo.cfg above<br/>
 - Run the application as the main method is in HazelnutApplication.java.
- 
